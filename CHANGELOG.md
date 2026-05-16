@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.3...agent-tunnel-v0.1.4) (2026-05-16)
+
+
+### Bug Fixes
+
+* **ci:** start dockerd before docker build on the pks runner ([fe1432d](https://github.com/pksorensen/pks-agent-tunnel/commit/fe1432db5091921f9b61fff666e1563747dd690e))
+
 ## [0.1.3](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.2...agent-tunnel-v0.1.3) (2026-05-16)
 
 
