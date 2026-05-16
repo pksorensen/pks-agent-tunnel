@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.1...agent-tunnel-v0.1.2) (2026-05-16)
+
+
+### Bug Fixes
+
+* **ci:** push to GHCR on ubuntu-latest; kjeldager registry now opt-in ([4623153](https://github.com/pksorensen/pks-agent-tunnel/commit/4623153c40853acb72f108c3137c4fcf10b9fd6d))
+
 ## [0.1.1](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.0...agent-tunnel-v0.1.1) (2026-05-16)
 
 
