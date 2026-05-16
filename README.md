@@ -55,7 +55,7 @@ curl -H 'Host: ws-relay--agentic.localtest.me' http://localhost:8080/
 
 v0.1 ships **without native ACME** — front the server with [Caddy](https://caddyserver.com) for wildcard TLS termination. v0.2 will add native ACME and the Caddy hop drops out.
 
-The image lives at `registry.kjeldager.io/agent-tunnel-server:latest` (built by the [release workflow](.github/workflows/release.yml) on every release-please tag).
+The image lives at `ghcr.io/pksorensen/agent-tunnel-server:latest` (built by the [release workflow](.github/workflows/release.yml) on every release-please tag). The package is public — no `docker login` needed to pull. To also push to `registry.kjeldager.io`, set the repo variable `PUSH_TO_KJELDAGER_REGISTRY=true` and add the `REGISTRY_KJELDAGER_USERNAME` / `REGISTRY_KJELDAGER_PASSWORD` secrets; the release workflow will then push to both registries.
 
 ### Prerequisites
 
@@ -92,7 +92,7 @@ sudo ufw enable
 ```yaml
 services:
   agent-tunnel:
-    image: registry.kjeldager.io/agent-tunnel-server:latest
+    image: ghcr.io/pksorensen/agent-tunnel-server:latest
     container_name: agent-tunnel
     restart: unless-stopped
     expose: ["8080", "7080"]            # plain HTTP behind Caddy
