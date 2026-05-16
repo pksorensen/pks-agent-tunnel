@@ -8,7 +8,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  packages: write
 
 jobs:
   release-please:
@@ -28,45 +27,25 @@ jobs:
   build-push:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, devcontainer-runner]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Push to GitHub Container Registry by default — uses the built-in
-      # GITHUB_TOKEN, no per-repo runner provisioning needed. Image lands at:
-      #   ghcr.io/pksorensen/agent-tunnel-server:<version>
-      #   ghcr.io/pksorensen/agent-tunnel-server:latest
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Optional second push to registry.kjeldager.io — only attempted when
-      # REGISTRY_KJELDAGER_USERNAME + REGISTRY_KJELDAGER_PASSWORD secrets are set.
-      # The whole step set is gated; absence of secrets is not an error.
-      - name: Log in to registry.kjeldager.io (optional)
-        if: ${{ vars.PUSH_TO_KJELDAGER_REGISTRY == 'true' }}
-        uses: docker/login-action@v3
+      - name: Log in to registry
+        uses: pksorensen/pks-cli/.github/actions/registry-login@main
         with:
           registry: registry.kjeldager.io
-          username: ${{ secrets.REGISTRY_KJELDAGER_USERNAME }}
-          password: ${{ secrets.REGISTRY_KJELDAGER_PASSWORD }}
-
       - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: src/agent-tunnel-server/Dockerfile
-          push: true
+        run: |
+          VERSION="${{ needs.release-please.outputs.version }}"
           # Build context = repo root so the Dockerfile can COPY go.work and
           # the sibling src/protocol module the server's go.mod replaces.
-          tags: |
-            ghcr.io/pksorensen/agent-tunnel-server:${{ needs.release-please.outputs.version }}
-            ghcr.io/pksorensen/agent-tunnel-server:latest
-            ${{ vars.PUSH_TO_KJELDAGER_REGISTRY == 'true' && format('registry.kjeldager.io/agent-tunnel-server:{0}', needs.release-please.outputs.version) || '' }}
-            ${{ vars.PUSH_TO_KJELDAGER_REGISTRY == 'true' && 'registry.kjeldager.io/agent-tunnel-server:latest' || '' }}
+          docker build \
+            -f src/agent-tunnel-server/Dockerfile \
+            -t registry.kjeldager.io/agent-tunnel-server:${VERSION} \
+            .
+          docker tag registry.kjeldager.io/agent-tunnel-server:${VERSION} registry.kjeldager.io/agent-tunnel-server:latest
+          docker push registry.kjeldager.io/agent-tunnel-server:${VERSION}
+          docker push registry.kjeldager.io/agent-tunnel-server:latest
+      - name: Log out
+        if: always()
+        run: docker logout registry.kjeldager.io

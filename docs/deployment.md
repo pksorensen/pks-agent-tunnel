@@ -2,7 +2,7 @@
 
 > **Heads-up — v0.1 has no native ACME yet.** For the working v0.1 install, see the [Caddy-fronted recipe in the top-level README](../README.md#vps-installation-guide-v01--caddy-front-for-tls). The rest of this document describes the **v0.2+ native-ACME design** that drops the Caddy hop. Env vars listed here are aspirational until v0.2 lands.
 
-The server ships as a Docker image to `ghcr.io/pksorensen/agent-tunnel-server`. Deploy on a single VPS (Hetzner / Coolify) with:
+The server ships as a Docker image to `registry.kjeldager.io/agent-tunnel-server`. Deploy on a single VPS (Hetzner / Coolify) with:
 
 - A public IPv4 (the server terminates TLS itself).
 - An apex domain or subdomain pointed at it with a wildcard A/AAAA record (`*.tunnels.example.com`).
@@ -55,19 +55,19 @@ docker run -d \
   -e ACME_DNS_PROVIDER=cloudflare \
   -e ACME_DNS_TOKEN=<api-token> \
   -e AUTH_MODE=token \
-  ghcr.io/pksorensen/agent-tunnel-server:latest
+  registry.kjeldager.io/agent-tunnel-server:latest
 ```
 
 To update:
 
 ```bash
-docker pull ghcr.io/pksorensen/agent-tunnel-server:latest
+docker pull registry.kjeldager.io/agent-tunnel-server:latest
 docker restart agent-tunnel
 ```
 
 ## Coolify
 
-1. Add service → Docker Image → `ghcr.io/pksorensen/agent-tunnel-server:latest`.
+1. Add service → Docker Image → `registry.kjeldager.io/agent-tunnel-server:latest`.
 2. Set the env vars above.
 3. Add a persistent volume mounted at `/data`.
 4. **Port bypass**: Coolify normally routes HTTP/HTTPS through Traefik. This server terminates TLS itself, so 443, 7443, and the TCP pool must bind directly to the host — *not* through the proxy. Map them as raw port bindings.
