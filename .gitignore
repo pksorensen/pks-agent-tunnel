@@ -1,0 +1,24 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/dist/
+**/.next/
+
+# Go binaries (no extension) at module roots
+src/agent-tunnel-server/agent-tunnel-server
+src/agent-tunnel/agent-tunnel
+
+# Runtime state
+app/
+user-data/
+*.pid
+*.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Env
+.env
+.env.local

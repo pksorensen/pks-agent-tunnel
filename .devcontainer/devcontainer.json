@@ -1,0 +1,17 @@
+{
+  "name": "pks-agent-tunnel",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "node",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-dotnettools.csharp"
+      ]
+    }
+  },
+  "forwardPorts": [8080, 7080]
+}

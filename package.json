@@ -1,0 +1,7 @@
+{
+  "name": "pks-agent-tunnel",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Self-hosted devtunnel replacement: Go server + CLI + Aspire drop-in extension.",
+  "license": "MIT"
+}

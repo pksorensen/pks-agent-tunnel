@@ -1,0 +1,7 @@
+go 1.24
+
+use (
+	./src/protocol
+	./src/agent-tunnel-server
+	./src/agent-tunnel
+)
