@@ -30,6 +30,31 @@ jobs:
     runs-on: [self-hosted, devcontainer-runner]
     steps:
       - uses: actions/checkout@v4
+
+      # JIT devcontainer runners on this repo come up with the docker CLI and
+      # the pks-creds helper, but dockerd itself isn't always running. Start
+      # it via the docker-init.sh script that ships with the pks-fullstack-base
+      # image (passwordless sudo is pre-configured for that path). Idempotent.
+      - name: Ensure docker daemon is running
+        run: |
+          if docker info >/dev/null 2>&1; then
+            echo "docker daemon already running"
+          elif [ -x /usr/local/share/docker-init.sh ]; then
+            echo "starting dockerd via docker-init.sh"
+            sudo /usr/local/share/docker-init.sh &
+            for i in $(seq 1 30); do
+              if docker info >/dev/null 2>&1; then
+                echo "docker daemon up after ${i}s"
+                break
+              fi
+              sleep 1
+            done
+            docker info >/dev/null 2>&1 || { echo "::error::dockerd did not come up within 30s"; exit 1; }
+          else
+            echo "::error::No docker daemon and no /usr/local/share/docker-init.sh on this runner"
+            exit 1
+          fi
+
       - name: Log in to registry
         uses: pksorensen/pks-cli/.github/actions/registry-login@main
         with:
