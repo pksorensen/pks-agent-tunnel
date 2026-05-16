@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.2...agent-tunnel-v0.1.3) (2026-05-16)
+
+
+### Reverts
+
+* **ci:** back to pks self-hosted runner + registry.kjeldager.io ([849518e](https://github.com/pksorensen/pks-agent-tunnel/commit/849518e04046084c3bd8280f5ca9db2ba0577cc2))
+
 ## [0.1.2](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.1...agent-tunnel-v0.1.2) (2026-05-16)
 
 
