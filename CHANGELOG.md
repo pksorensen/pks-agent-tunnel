@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.4...agent-tunnel-v0.1.5) (2026-05-18)
+
+
+### Bug Fixes
+
+* **devcontainer:** mirror pks-agent-ftp so PKS runner spawns dockerd ([8b29ab1](https://github.com/pksorensen/pks-agent-tunnel/commit/8b29ab1cf59e01bed0530eb413a7e3150979a725))
+
 ## [0.1.4](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.3...agent-tunnel-v0.1.4) (2026-05-16)
 
 
