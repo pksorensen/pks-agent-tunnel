@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.3.1...agent-tunnel-v0.3.2) (2026-05-20)
+
+
+### Bug Fixes
+
+* **router:** set X-Forwarded-Proto/Host so upstream redirects keep https ([d6c6caf](https://github.com/pksorensen/pks-agent-tunnel/commit/d6c6caf52262fdcfb262530a3b393a77b222fbab))
+
 ## [0.3.1](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.3.0...agent-tunnel-v0.3.1) (2026-05-20)
 
 
