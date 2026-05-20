@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.3.0...agent-tunnel-v0.3.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* **ci:** bump build image to golang:1.25-alpine ([7ca86dd](https://github.com/pksorensen/pks-agent-tunnel/commit/7ca86ddc0809aeedb52ec1348eb559c513bd5627))
+
 ## [0.3.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.2.0...agent-tunnel-v0.3.0) (2026-05-20)
 
 
