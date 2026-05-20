@@ -30,6 +30,18 @@ public class AgentTunnelResource : Resource
     internal Dictionary<string, SlotBinding> SlotsByResource { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Tracks which slots have seen their source resource's
+    /// <c>ResourceEndpointsAllocatedEvent</c> fire. Once this matches
+    /// <see cref="SlotsByResource"/>, every referenced upstream has an
+    /// allocated port and the CLI can spawn with concrete <c>--http</c> args.
+    /// </summary>
+    internal HashSet<string> SlotEndpointsAllocated { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Guards CLI spawn against concurrent allocation events.</summary>
+    internal readonly SemaphoreSlim StartGate = new(1, 1);
+    internal bool CliStarted;
+
+    /// <summary>
     /// Public URLs reported by the CLI after a successful <c>register_ack</c>.
     /// Keyed by slot name.
     /// </summary>
@@ -49,6 +61,33 @@ public class AgentTunnelResource : Resource
     }
 
     internal sealed record SlotBinding(string SlotName, IResource Source, string EndpointName);
+
+    /// <summary>
+    /// Slot resources visible in the Aspire dashboard, keyed by slot name.
+    /// Populated alongside <see cref="SlotsByResource"/> by <c>WithReference</c>.
+    /// </summary>
+    internal Dictionary<string, AgentTunnelSlotResource> SlotResources { get; } = new(StringComparer.Ordinal);
+}
+
+/// <summary>
+/// One forwarded slot — appears as a child row of the tunnel in the dashboard.
+/// Mirrors the per-port child rows that <c>Aspire.Hosting.DevTunnels</c> renders
+/// for each <c>WithReference</c> call. The URL is empty until the CLI emits
+/// <c>TUNNEL_READY</c>; thereafter the slot's state goes Running and the public
+/// URL becomes a clickable link in the dashboard.
+/// </summary>
+public sealed class AgentTunnelSlotResource(
+    string name,
+    AgentTunnelResource parent,
+    string slotName,
+    IResource source,
+    string endpointName)
+    : Resource(name), IResourceWithParent<AgentTunnelResource>
+{
+    public AgentTunnelResource Parent { get; } = parent;
+    public string SlotName { get; } = slotName;
+    public IResource Source { get; } = source;
+    public string EndpointName { get; } = endpointName;
 }
 
 /// <summary>

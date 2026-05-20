@@ -39,17 +39,14 @@ public static class AgentTunnelExtensions
         var resource = new DevTunnelResource(name);
         var rb = builder.AddResource(resource);
 
-        // Subscribe to BeforeStartEvent for this specific tunnel. The CLI is a
-        // *transport*, not an app resource — we deliberately spawn it outside the
-        // Aspire resource lifecycle so the dashboard's Stop/Restart commands
-        // can't tear it down and break still-running references.
-        var hooks = new AgentTunnelHooks();
-        builder.Eventing.Subscribe<BeforeStartEvent>(async (evt, ct) =>
-        {
-            var log = evt.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AgentTunnel");
-            await hooks.StartCliAsync(resource, log, ct).ConfigureAwait(false);
-        });
-        builder.Services.AddSingleton(hooks); // disposed by DI on shutdown
+        // The CLI is a *transport*, not an app resource — we spawn it outside the
+        // Aspire resource lifecycle so the dashboard's Stop/Restart commands can't
+        // tear it down and break still-running references. The spawn itself is
+        // triggered by WithReference: each call subscribes to its source's
+        // ResourceEndpointsAllocatedEvent, and the CLI fires once the last source
+        // has had its endpoint port allocated. AfterEndpointsAllocatedEvent is
+        // deprecated in 13.x and doesn't fire reliably anymore.
+        builder.Services.AddSingleton(new AgentTunnelHooks()); // disposed by DI on shutdown
 
         return rb;
     }
@@ -76,7 +73,41 @@ public static class AgentTunnelExtensions
         where T : IResourceWithEndpoints
     {
         var slotName = source.Resource.Name;
-        builder.Resource.SlotsByResource[slotName] = new AgentTunnelResource.SlotBinding(slotName, source.Resource, endpointName);
+        var tunnel = builder.Resource;
+        tunnel.SlotsByResource[slotName] = new AgentTunnelResource.SlotBinding(slotName, source.Resource, endpointName);
+
+        // Add a child resource per slot so it renders in the dashboard nested
+        // under the tunnel — matches the per-port rows Aspire.Hosting.DevTunnels
+        // displays. The URL is filled in once TUNNEL_READY arrives.
+        var slotResource = new AgentTunnelSlotResource(
+            name: $"{tunnel.Name}-{slotName}",
+            parent: tunnel,
+            slotName: slotName,
+            source: source.Resource,
+            endpointName: endpointName);
+        builder.ApplicationBuilder.AddResource(slotResource);
+        tunnel.SlotResources[slotName] = slotResource;
+
+        // Subscribe to this source's ResourceEndpointsAllocatedEvent. When the
+        // last referenced source fires (count matches), spawn the CLI — by then
+        // every slot has an allocated port available via EndpointAnnotation.
+        source.OnResourceEndpointsAllocated(async (_, evt, ct) =>
+        {
+            await tunnel.StartGate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                tunnel.SlotEndpointsAllocated.Add(slotName);
+                if (tunnel.CliStarted) return;
+                if (tunnel.SlotEndpointsAllocated.Count < tunnel.SlotsByResource.Count) return;
+                tunnel.CliStarted = true;
+            }
+            finally { tunnel.StartGate.Release(); }
+
+            var hooks = evt.Services.GetRequiredService<AgentTunnelHooks>();
+            var log = evt.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AgentTunnel");
+            var notifier = evt.Services.GetRequiredService<ResourceNotificationService>();
+            await hooks.StartCliAsync(tunnel, log, notifier, ct).ConfigureAwait(false);
+        });
         return builder;
     }
 
@@ -160,18 +191,40 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
 {
     private readonly List<Process> _processes = new();
 
-    public Task StartCliAsync(AgentTunnelResource tunnel, ILogger logger, CancellationToken ct)
+    public async Task StartCliAsync(AgentTunnelResource tunnel, ILogger logger, ResourceNotificationService notifier, CancellationToken ct)
     {
         if (tunnel.SlotsByResource.Count == 0)
         {
             logger.LogWarning("AgentTunnel '{Tunnel}' has no slots registered via WithReference — skipping CLI spawn.", tunnel.TunnelName);
+            await notifier.PublishUpdateAsync(tunnel, s => s with
+            {
+                State = new ResourceStateSnapshot("No slots", KnownResourceStateStyles.Warn),
+            }).ConfigureAwait(false);
             tunnel.Ready.TrySetResult();
-            return Task.CompletedTask;
+            return;
         }
-        return StartCliInternalAsync(tunnel, logger, ct);
+
+        // Initial dashboard state: tunnel + each slot "Starting".
+        await notifier.PublishUpdateAsync(tunnel, s => s with
+        {
+            State = new ResourceStateSnapshot("Starting", KnownResourceStateStyles.Info),
+            Properties = s.Properties.Add(new ResourcePropertySnapshot("server", tunnel.ServerUrl)),
+        }).ConfigureAwait(false);
+        foreach (var slot in tunnel.SlotResources.Values)
+        {
+            await notifier.PublishUpdateAsync(slot, s => s with
+            {
+                State = new ResourceStateSnapshot("Starting", KnownResourceStateStyles.Info),
+                Properties = s.Properties
+                    .Add(new ResourcePropertySnapshot("source", slot.Source.Name))
+                    .Add(new ResourcePropertySnapshot("endpoint", slot.EndpointName)),
+            }).ConfigureAwait(false);
+        }
+
+        await StartCliInternalAsync(tunnel, logger, notifier, ct).ConfigureAwait(false);
     }
 
-    private Task StartCliInternalAsync(AgentTunnelResource tunnel, ILogger logger, CancellationToken ct)
+    private Task StartCliInternalAsync(AgentTunnelResource tunnel, ILogger logger, ResourceNotificationService notifier, CancellationToken ct)
     {
         var binary = ResolveCliBinary()
             ?? throw new InvalidOperationException(
@@ -186,10 +239,8 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
         };
         foreach (var (slot, binding) in tunnel.SlotsByResource)
         {
-            // For v0.1 we assume each referenced resource exposes an HTTP endpoint
-            // on a known port. Aspire's endpoint allocation runs before BeforeStart,
-            // so binding.Source has a port by now. We forward to localhost:<port>
-            // since both the CLI and the Aspire-managed processes share a host.
+            // Aspire's endpoint allocation has fired by the time WithReference's
+            // OnResourceEndpointsAllocated callback runs StartCliAsync.
             var port = binding.Source.Annotations.OfType<EndpointAnnotation>()
                 .FirstOrDefault(e => e.Name == binding.EndpointName)?.AllocatedEndpoint?.Port;
             if (port is null)
@@ -212,8 +263,19 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
         foreach (var a in args) psi.ArgumentList.Add(a);
 
         var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        proc.OutputDataReceived += (_, e) => HandleStdout(tunnel, logger, e.Data);
+        proc.OutputDataReceived += (_, e) => _ = HandleStdoutAsync(tunnel, logger, notifier, e.Data);
         proc.ErrorDataReceived  += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) logger.LogInformation("agent-tunnel[{Tunnel}]: {Line}", tunnel.TunnelName, e.Data); };
+        proc.Exited += async (_, _) =>
+        {
+            try
+            {
+                var stopped = new ResourceStateSnapshot("Exited", KnownResourceStateStyles.Error);
+                await notifier.PublishUpdateAsync(tunnel, s => s with { State = stopped }).ConfigureAwait(false);
+                foreach (var slot in tunnel.SlotResources.Values)
+                    await notifier.PublishUpdateAsync(slot, s => s with { State = stopped }).ConfigureAwait(false);
+            }
+            catch { /* shutting down */ }
+        };
         proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
@@ -223,7 +285,7 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    private void HandleStdout(AgentTunnelResource tunnel, ILogger logger, string? line)
+    private async Task HandleStdoutAsync(AgentTunnelResource tunnel, ILogger logger, ResourceNotificationService notifier, string? line)
     {
         if (string.IsNullOrEmpty(line)) return;
         const string prefix = "TUNNEL_READY ";
@@ -239,12 +301,24 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
             if (payload?.Slots is null) return;
             foreach (var s in payload.Slots)
             {
-                if (!string.IsNullOrEmpty(s.Name) && !string.IsNullOrEmpty(s.Url))
+                if (string.IsNullOrEmpty(s.Name) || string.IsNullOrEmpty(s.Url)) continue;
+                tunnel.PublicUrls[s.Name] = s.Url;
+                logger.LogInformation("agent-tunnel[{Tunnel}]: {Slot} → {Url}", tunnel.TunnelName, s.Name, s.Url);
+
+                if (tunnel.SlotResources.TryGetValue(s.Name, out var slotResource))
                 {
-                    tunnel.PublicUrls[s.Name] = s.Url;
-                    logger.LogInformation("agent-tunnel[{Tunnel}]: {Slot} → {Url}", tunnel.TunnelName, s.Name, s.Url);
+                    await notifier.PublishUpdateAsync(slotResource, snap => snap with
+                    {
+                        State = new ResourceStateSnapshot("Running", KnownResourceStateStyles.Success),
+                        Urls  = snap.Urls.Add(new UrlSnapshot(Name: "public", Url: s.Url, IsInternal: false)),
+                    }).ConfigureAwait(false);
                 }
             }
+
+            await notifier.PublishUpdateAsync(tunnel, snap => snap with
+            {
+                State = new ResourceStateSnapshot("Running", KnownResourceStateStyles.Success),
+            }).ConfigureAwait(false);
             tunnel.Ready.TrySetResult();
         }
         catch (Exception ex)
