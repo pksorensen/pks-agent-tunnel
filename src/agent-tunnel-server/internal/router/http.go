@@ -63,13 +63,25 @@ func (h *httpFrontend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// httputil.ReverseProxy wants a target URL — we use a sentinel since
 	// the actual dial returns our yamux stream regardless of host.
 	target, _ := url.Parse("http://upstream.invalid")
+
+	// Original scheme as seen by the public client. The tunnel terminates
+	// TLS, so r.TLS != nil means the user came in over https; we forward to
+	// the upstream over plain http and rely on X-Forwarded-Proto for the
+	// upstream framework (Next.js, NextAuth, etc.) to know the real scheme
+	// when it builds absolute redirect URLs.
+	originalProto := "http"
+	if r.TLS != nil {
+		originalProto = "https"
+	}
+
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
-			// Preserve the original Host so the upstream app sees the
-			// real subdomain (matches devtunnel behaviour).
 			req.Host = r.Host
+			req.Header.Set("X-Forwarded-Proto", originalProto)
+			req.Header.Set("X-Forwarded-Host", r.Host)
+			// X-Forwarded-For is set automatically by httputil.ReverseProxy.
 		},
 		Transport: &http.Transport{
 			DialContext:           dial,
