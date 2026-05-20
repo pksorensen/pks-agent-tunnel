@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.2.0...agent-tunnel-v0.3.0) (2026-05-20)
+
+
+### Features
+
+* **aspire:** nested slot resources + clickable URLs in dashboard ([8dd4756](https://github.com/pksorensen/pks-agent-tunnel/commit/8dd47565e28be66bfc747f1bc1a02106a4e6fafc))
+* **server:** native Let's Encrypt via certmagic + Cloudflare DNS-01 ([16ec97d](https://github.com/pksorensen/pks-agent-tunnel/commit/16ec97d5c49617d87df028b3644f64e9f51d96dc))
+
 ## [0.2.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.5...agent-tunnel-v0.2.0) (2026-05-20)
 
 
