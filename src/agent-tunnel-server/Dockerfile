@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /workspace
 # Server depends on src/protocol via a `replace ../protocol` directive in go.mod.
 # Don't copy go.work — it references src/agent-tunnel which we don't ship in
