@@ -14,7 +14,7 @@ func TestPublicPortSuffix(t *testing.T) {
 	}{
 		{"listener default", config.Config{ListenHTTP: ":8080"}, ":8080"},
 		{"listener host-bound", config.Config{ListenHTTP: "0.0.0.0:8080"}, ":8080"},
-		{"listener 443 → empty", config.Config{ListenHTTP: ":443", TLS: true}, ""},
+		{"listener 443 → empty", config.Config{ListenHTTP: ":443"}, ""},
 		{"listener 80 → empty", config.Config{ListenHTTP: ":80"}, ""},
 		{"public-port overrides listener", config.Config{ListenHTTP: ":8080", PublicHTTPPort: "18080"}, ":18080"},
 		{"public-port with leading colon", config.Config{ListenHTTP: ":8080", PublicHTTPPort: ":18080"}, ":18080"},

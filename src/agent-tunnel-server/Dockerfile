@@ -14,14 +14,12 @@ FROM alpine:3.21
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /out/agent-tunnel-server /app/agent-tunnel-server
-# v0.1: server speaks plain HTTP — front it with Caddy/nginx for TLS.
-# v0.2 will switch the defaults to :443/:7443 with built-in ACME.
 ENV USER_DATA_DIR=/data
 ENV LISTEN_HTTP=:8080
 ENV LISTEN_CONTROL=:7080
 ENV TCP_POOL_MIN=10000
 ENV TCP_POOL_MAX=19999
 ENV AUTH_MODE=anonymous
-EXPOSE 8080 7080 10000-19999
+EXPOSE 80 443 7443 8080 7080 10000-19999
 VOLUME /data
 ENTRYPOINT ["/app/agent-tunnel-server"]
