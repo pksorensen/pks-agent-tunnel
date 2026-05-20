@@ -93,6 +93,20 @@ public static class AgentTunnelExtensions
     }
 
     /// <summary>
+    /// Points the tunnel at a specific server. Example:
+    /// <c>.WithServer("ws://tunnels.agentics.dk:17080")</c>. Defaults to
+    /// <c>ws://localhost:7080</c> when not set — useful when the AppHost
+    /// also spawns an <c>agent-tunnel-server</c> locally.
+    /// </summary>
+    public static IResourceBuilder<DevTunnelResource> WithServer(
+        this IResourceBuilder<DevTunnelResource> builder,
+        string url)
+    {
+        builder.Resource.ServerUrl = url;
+        return builder;
+    }
+
+    /// <summary>
     /// Returns a <see cref="ReferenceExpression"/> for the public URL of <paramref name="resource"/>
     /// through this tunnel. Resolution awaits the CLI's first <c>TUNNEL_READY</c>
     /// emission, so the value is only materialised when an app actually needs it
