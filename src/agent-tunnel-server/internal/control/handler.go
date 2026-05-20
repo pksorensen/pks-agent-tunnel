@@ -109,7 +109,7 @@ func (h *Handler) handleControl(w http.ResponseWriter, r *http.Request) {
 		switch s.Kind {
 		case protocol.SlotKindHTTP:
 			subdomain := protocol.SubdomainFor(s.Name, reg.Tunnel)
-			url := fmt.Sprintf("%s://%s.%s%s", h.cfg.PublicScheme(), subdomain, h.cfg.PublicDomain, externalSuffix(h.cfg.ListenHTTP))
+			url := fmt.Sprintf("%s://%s.%s%s", h.cfg.PublicScheme(), subdomain, h.cfg.PublicDomain, publicPortSuffix(h.cfg))
 			if err := h.st.PutSlot(reg.Owner, reg.Tunnel, store.Slot{
 				Name: s.Name, Kind: s.Kind, Subdomain: subdomain,
 				UpstreamHint: s.UpstreamHint, Anonymous: s.Anonymous,
@@ -171,16 +171,22 @@ func writeError(w net.Conn, code, msg, slot string) {
 	_ = writeFrame(w, protocol.ErrorFrame{Type: protocol.FrameError, Code: code, Message: msg, Slot: slot})
 }
 
-// externalSuffix renders the listen port as a URL suffix when it's not the
-// default for the public scheme. ":8080" → ":8080"; ":443" with tls → "".
-func externalSuffix(addr string) string {
-	// addr is e.g. ":8080" or "0.0.0.0:8080" or ":443".
-	if idx := strings.LastIndexByte(addr, ':'); idx >= 0 {
-		port := addr[idx:]
-		if port == ":443" || port == ":80" {
-			return ""
+// publicPortSuffix renders the URL port suffix for emitted public URLs.
+// Prefers cfg.PublicHTTPPort when set (Docker host-port mapping case);
+// otherwise falls back to cfg.ListenHTTP's port. Returns empty for the
+// scheme-default ports (":80" / ":443") so the URL is clean.
+func publicPortSuffix(cfg config.Config) string {
+	var port string
+	switch {
+	case cfg.PublicHTTPPort != "":
+		port = ":" + strings.TrimPrefix(cfg.PublicHTTPPort, ":")
+	default:
+		if idx := strings.LastIndexByte(cfg.ListenHTTP, ':'); idx >= 0 {
+			port = cfg.ListenHTTP[idx:]
 		}
-		return port
 	}
-	return ""
+	if port == ":443" || port == ":80" {
+		return ""
+	}
+	return port
 }

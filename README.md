@@ -51,18 +51,17 @@ go run ./src/agent-tunnel host \
 curl -H 'Host: ws-relay--agentic.localtest.me' http://localhost:8080/
 ```
 
-## VPS installation guide (v0.1 — Caddy front for TLS)
+## VPS installation guide (v0.1 — plain HTTP, no TLS)
 
-v0.1 ships **without native ACME** — front the server with [Caddy](https://caddyserver.com) for wildcard TLS termination. v0.2 will add native ACME and the Caddy hop drops out.
+v0.1 speaks plain HTTP. Stand it up on a Hetzner box with two `docker run` lines and you're done — same operational pattern as `pks-agent-ftp` / `pks-agent-inbox`. v0.2 adds native ACME + wildcard TLS so the URLs lose the port suffix; until then, the tunnel works for everything that's happy with `http://` and `ws://` (curl, the vibecast Go CLI, scripts, the Aspire integration).
 
-The image lives at `registry.kjeldager.io/agent-tunnel-server:latest` (built by the [release workflow](.github/workflows/release.yml) on every release-please tag — built and pushed by the PKS self-hosted runner, which uses a unix-socket credential helper to log in to the registry without any GitHub secrets).
+The image lives at `registry.kjeldager.io/agent-tunnel-server:latest` — built and pushed by the PKS self-hosted runner via a unix-socket credential helper, so no GitHub secrets are needed.
 
 ### Prerequisites
 
-- A VPS with a public IPv4 (a Hetzner CX22 is plenty).
+- A VPS with a public IPv4 (Hetzner CX22 is plenty).
 - A domain whose DNS you control (e.g. `tunnels.example.com`).
-- The DNS provider's API token for the [Caddy DNS plugin](https://caddyserver.com/docs/automatic-https#dns-challenge) — used for wildcard DNS-01 issuance. Cloudflare is the worked example below.
-- Docker + Docker Compose installed on the VPS.
+- Docker installed on the VPS (no Compose required).
 - A registry pull token for `registry.kjeldager.io` (already in place if you also run other `pks-agent-*` services).
 
 ### Step 1 — DNS
@@ -76,132 +75,83 @@ A   tunnels.example.com     → <vps-ip>
 
 ### Step 2 — Firewall
 
+Pick the host ports you want to expose. The image listens on `:8080` (public HTTP) and `:7080` (control plane) inside the container — host-map them to whatever's free. The worked example below uses `18080`/`17080`:
+
 ```bash
 sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw allow 7443/tcp                # control plane (WSS for the CLI)
-sudo ufw allow 10000:19999/tcp         # TCP slot pool — open in v0.3
+sudo ufw allow 18080/tcp     # public HTTP frontend
+sudo ufw allow 17080/tcp     # control plane (plain WS for the CLI)
 sudo ufw enable
 ```
 
-### Step 3 — Compose file
+If `:8080`/`:7080` are free on the host, just map straight (`-p 8080:8080 -p 7080:7080`) and skip the `PUBLIC_HTTP_PORT` env var below.
 
-`/srv/agent-tunnel/docker-compose.yml`:
-
-```yaml
-services:
-  agent-tunnel:
-    image: registry.kjeldager.io/agent-tunnel-server:latest
-    container_name: agent-tunnel
-    restart: unless-stopped
-    expose: ["8080", "7080"]            # plain HTTP behind Caddy
-    environment:
-      USER_DATA_DIR: /data
-      LISTEN_HTTP: ":8080"
-      LISTEN_CONTROL: ":7080"
-      AUTH_MODE: anonymous              # switch to "token" in v0.3
-    volumes:
-      - agent-tunnel-data:/data
-    networks: [edge]
-
-  caddy:
-    image: caddy:2
-    container_name: agent-tunnel-caddy
-    restart: unless-stopped
-    ports: ["80:80", "443:443", "7443:7443"]
-    environment:
-      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
-      TLS_DOMAIN: tunnels.example.com
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    networks: [edge]
-    depends_on: [agent-tunnel]
-
-networks:
-  edge:
-
-volumes:
-  agent-tunnel-data:
-  caddy-data:
-  caddy-config:
-```
-
-> **Cloudflare plugin**: `caddy:2` does not include the Cloudflare DNS plugin by default. Either swap the image for `slothcroissant/caddy-cloudflaredns:latest` (drop-in, includes the plugin) or build your own via `xcaddy build --with github.com/caddy-dns/cloudflare`.
-
-`/srv/agent-tunnel/Caddyfile`:
-
-```caddyfile
-{
-    email ops@example.com
-}
-
-# Public wildcard frontend — TLS terminated here, plain HTTP forwarded to the server.
-*.tunnels.example.com, tunnels.example.com {
-    tls {
-        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-    }
-    reverse_proxy agent-tunnel:8080
-}
-
-# Control plane on :7443 — wss:// for the CLI.
-:7443 {
-    tls {
-        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-    }
-    reverse_proxy agent-tunnel:7080
-}
-```
-
-### Step 4 — Bring it up
+### Step 3 — Run the server
 
 ```bash
-cd /srv/agent-tunnel
-echo 'CLOUDFLARE_API_TOKEN=<your-token>' > .env
+docker pull registry.kjeldager.io/agent-tunnel-server:latest
 
-docker login registry.kjeldager.io     # if not already logged in
-docker compose pull
-docker compose up -d
-docker compose logs -f --tail=50
+docker stop agent-tunnel 2>/dev/null; docker rm agent-tunnel 2>/dev/null
+
+docker run -d \
+  --name agent-tunnel \
+  --restart unless-stopped \
+  -p 18080:8080 \
+  -p 17080:7080 \
+  -v agent-tunnel-data:/data \
+  -e TLS_DOMAIN=tunnels.example.com \
+  -e PUBLIC_HTTP_PORT=18080 \
+  registry.kjeldager.io/agent-tunnel-server:latest
 ```
 
-### Step 5 — Smoke-test
+What the env vars do (both optional, both purely cosmetic — they affect the URL the CLI prints, not the routing):
+
+- `TLS_DOMAIN` — wildcard apex baked into emitted URLs. Misnamed for v0.1 (we'll rename it `PUBLIC_DOMAIN` alongside the v0.2 ACME work); for now it sets the host part of every `lastSeenPublicUrl`.
+- `PUBLIC_HTTP_PORT` — overrides the port shown in emitted URLs. Set this when the host-bound port differs from the container-internal `:8080`.
+
+### Step 4 — Smoke-test
 
 From any machine:
 
 ```bash
-# 1. Control plane healthcheck (should reply "ok" with a valid cert)
-curl https://tunnels.example.com:7443/healthz
+# 1. Control plane healthcheck
+curl http://tunnels.example.com:17080/healthz
+# expect: ok
 
-# 2. A non-existent slot returns 404 — that's correct (frontend works)
-curl -i https://nothing--agentic.tunnels.example.com/
+# 2. A non-existent slot returns 502 — that's correct (frontend works,
+# subdomain parsed, no client bound for that slot)
+curl -i http://nothing--agentic.tunnels.example.com:18080/
 
 # 3. Connect a CLI from a separate machine and tunnel a local upstream
 python3 -m http.server 9000 &
 agent-tunnel host \
-  --server wss://tunnels.example.com:7443 \
+  --server ws://tunnels.example.com:17080 \
   --owner agentics --name agentic \
   --http demo=127.0.0.1:9000
 
-# 4. From a third machine, hit the public URL
-curl https://demo--agentic.tunnels.example.com/
-# expect: the http.server directory listing
+# 4. Hit the public URL — body is whatever the upstream served
+curl http://demo--agentic.tunnels.example.com:18080/
 ```
 
-### Step 6 — Updates
+### Step 5 — Updates
 
 ```bash
-docker compose pull
-docker compose up -d
+docker pull registry.kjeldager.io/agent-tunnel-server:latest
+docker stop agent-tunnel && docker rm agent-tunnel
+# re-run the docker run from Step 3
 ```
 
 ### Backups
 
-State is one folder: `agent-tunnel-data` (mounted at `/data` in the container). `docker run --rm -v agent-tunnel-data:/data alpine tar czf - /data > backup.tgz` is a complete backup. No database, no migrations — see [docs/storage.md](docs/storage.md) and [ADR 0006](docs/adr/0006-folder-based-storage-no-database.md).
+State is one folder: the `agent-tunnel-data` named volume, mounted at `/data` in the container. Full backup:
 
-See [docs/deployment.md](docs/deployment.md) for the full env-var matrix and a Coolify deployment recipe.
+```bash
+docker run --rm -v agent-tunnel-data:/data alpine tar czf - /data > backup.tgz
+```
+
+No database, no migrations — see [docs/storage.md](docs/storage.md) and [ADR 0006](docs/adr/0006-folder-based-storage-no-database.md).
+
+See [docs/deployment.md](docs/deployment.md) for the full env-var matrix and the v0.2 TLS plan.
 
 ## Aspire Drop-in
 
