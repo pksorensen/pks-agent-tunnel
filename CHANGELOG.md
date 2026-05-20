@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.5...agent-tunnel-v0.2.0) (2026-05-20)
+
+
+### Features
+
+* **aspire:** WithServer(url) for pointing at a remote tunnel server ([1649680](https://github.com/pksorensen/pks-agent-tunnel/commit/1649680b086bf07635d083b6d3933728dfd14870))
+* **server:** PUBLIC_HTTP_PORT for host-vs-container port mismatch ([a57a3a5](https://github.com/pksorensen/pks-agent-tunnel/commit/a57a3a5b8e1c523e62a823825cfba9f01081cd24))
+
 ## [0.1.5](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.1.4...agent-tunnel-v0.1.5) (2026-05-18)
 
 
