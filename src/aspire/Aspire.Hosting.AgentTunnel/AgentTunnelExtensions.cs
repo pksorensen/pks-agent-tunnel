@@ -124,6 +124,24 @@ public static class AgentTunnelExtensions
     }
 
     /// <summary>
+    /// Rewrites the scheme and/or port of every URL the server reports in
+    /// <c>TUNNEL_READY</c>. Use when the deployed <c>agent-tunnel-server</c> is
+    /// behind external TLS termination (e.g. a reverse proxy at <c>:8443</c>
+    /// fronting plain HTTP at <c>:18080</c>) — the server doesn't know about the
+    /// proxy, so it emits <c>http://…:18080</c> URLs that don't resolve for
+    /// callers. Pass <c>scheme: "https", port: 8443</c> to fix them up locally.
+    /// Pass <c>null</c> to leave that part untouched.
+    /// </summary>
+    public static IResourceBuilder<DevTunnelResource> WithPublicUrlOverride(
+        this IResourceBuilder<DevTunnelResource> builder,
+        string? scheme = null,
+        int? port = null)
+    {
+        builder.Resource.PublicUrlOverride = (scheme, port);
+        return builder;
+    }
+
+    /// <summary>
     /// Points the tunnel at a specific server. Example:
     /// <c>.WithServer("ws://tunnels.agentics.dk:17080")</c>. Defaults to
     /// <c>ws://localhost:7080</c> when not set — useful when the AppHost
@@ -302,15 +320,16 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
             foreach (var s in payload.Slots)
             {
                 if (string.IsNullOrEmpty(s.Name) || string.IsNullOrEmpty(s.Url)) continue;
-                tunnel.PublicUrls[s.Name] = s.Url;
-                logger.LogInformation("agent-tunnel[{Tunnel}]: {Slot} → {Url}", tunnel.TunnelName, s.Name, s.Url);
+                var url = ApplyPublicUrlOverride(s.Url, tunnel.PublicUrlOverride, logger, tunnel.TunnelName);
+                tunnel.PublicUrls[s.Name] = url;
+                logger.LogInformation("agent-tunnel[{Tunnel}]: {Slot} → {Url}", tunnel.TunnelName, s.Name, url);
 
                 if (tunnel.SlotResources.TryGetValue(s.Name, out var slotResource))
                 {
                     await notifier.PublishUpdateAsync(slotResource, snap => snap with
                     {
                         State = new ResourceStateSnapshot("Running", KnownResourceStateStyles.Success),
-                        Urls  = snap.Urls.Add(new UrlSnapshot(Name: "public", Url: s.Url, IsInternal: false)),
+                        Urls  = snap.Urls.Add(new UrlSnapshot(Name: "public", Url: url, IsInternal: false)),
                     }).ConfigureAwait(false);
                 }
             }
@@ -324,6 +343,23 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to parse TUNNEL_READY line: {Line}", line);
+        }
+    }
+
+    private static string ApplyPublicUrlOverride(string raw, (string? Scheme, int? Port) ov, ILogger logger, string tunnelName)
+    {
+        if (ov.Scheme is null && ov.Port is null) return raw;
+        try
+        {
+            var b = new UriBuilder(raw);
+            if (ov.Scheme is { } scheme) b.Scheme = scheme;
+            if (ov.Port is { } port) b.Port = port;
+            return b.Uri.ToString();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "agent-tunnel[{Tunnel}]: failed to apply public URL override to {Url}", tunnelName, raw);
+            return raw;
         }
     }
 

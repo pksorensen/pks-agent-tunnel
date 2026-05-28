@@ -24,6 +24,14 @@ public class AgentTunnelResource : Resource
     public bool Anonymous { get; internal set; } = true;
 
     /// <summary>
+    /// Optional override applied to URLs reported in <c>TUNNEL_READY</c>. Set via
+    /// <see cref="AgentTunnelExtensions.WithPublicUrlOverride"/> when the server
+    /// sits behind external TLS termination and can't describe its own public
+    /// scheme/port. Null fields leave that part of the URL untouched.
+    /// </summary>
+    internal (string? Scheme, int? Port) PublicUrlOverride { get; set; }
+
+    /// <summary>
     /// Slot registrations, keyed by the underlying resource. Populated by
     /// <see cref="AgentTunnelExtensions.WithReference"/> at construction time.
     /// </summary>
