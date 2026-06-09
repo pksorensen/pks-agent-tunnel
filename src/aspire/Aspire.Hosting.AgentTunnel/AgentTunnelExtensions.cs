@@ -175,6 +175,25 @@ public static class AgentTunnelExtensions
         return ReferenceExpression.Create($"{new TunnelUrlValueProvider(tunnel.Resource, slotName)}");
     }
 
+    /// <summary>
+    /// Returns a builder for the per-slot child resource created by
+    /// <see cref="WithReference"/> for <paramref name="resource"/>. Use it to
+    /// decorate the slot row in the dashboard (e.g. add a QR-code link next to
+    /// its public URL). Throws if the resource was never registered via
+    /// <c>WithReference</c>.
+    /// </summary>
+    public static IResourceBuilder<AgentTunnelSlotResource> GetSlot<T>(
+        this IResourceBuilder<DevTunnelResource> tunnel,
+        IResourceBuilder<T> resource)
+        where T : IResourceWithEndpoints
+    {
+        var slotName = resource.Resource.Name;
+        if (!tunnel.Resource.SlotResources.TryGetValue(slotName, out var slot))
+            throw new InvalidOperationException(
+                $"No tunnel slot registered for '{slotName}'. Call WithReference({slotName}) before GetSlot.");
+        return tunnel.ApplicationBuilder.CreateResourceBuilder(slot);
+    }
+
     private sealed class TunnelUrlValueProvider : IValueProvider, IManifestExpressionProvider
     {
         private readonly DevTunnelResource _tunnel;

@@ -72,6 +72,34 @@ docker restart agent-tunnel
 3. Add a persistent volume mounted at `/data`.
 4. **Port bypass**: Coolify normally routes HTTP/HTTPS through Traefik. This server terminates TLS itself, so 443, 7443, and the TCP pool must bind directly to the host — *not* through the proxy. Map them as raw port bindings.
 
+## Connecting a client (the published-port gotcha)
+
+The ports above (`:443` frontend, `:7443` control) are **container-internal**.
+What a client (`agent-tunnel host`, the Aspire extension, a browser) connects to
+is the **published host port**, which on a Coolify box where Traefik already owns
+`:443` is *not* the same number. On the live `tunnels.agentics.dk` deployment the
+published mapping is:
+
+| Role               | Container | Published host port                    | Client uses                                            |
+|--------------------|-----------|----------------------------------------|--------------------------------------------------------|
+| Control plane (WSS)| `:7443`   | `:17443`                               | `--server wss://tunnels.agentics.dk:17443`             |
+| Public TLS frontend| `:443`    | `:8443` (external TLS proxy → `:18080`)| `https://<slot>--<tunnel>.tunnels.agentics.dk:8443`    |
+| Plain HTTP frontend| `:8080`   | `:18080` (behind the `:8443` proxy)    | — (internal to the proxy)                              |
+
+So a working host invocation against the live server is:
+
+```bash
+agent-tunnel host --server wss://tunnels.agentics.dk:17443 \
+  --owner agentics --name coach --http app=127.0.0.1:8787
+# → https://app--coach.tunnels.agentics.dk:8443
+```
+
+> Pitfall: `:7443` on the public host is **not** the control plane (it may be a
+> different service entirely). Use the published `:17443`. The Aspire AppHost
+> encodes this correctly via `AGENT_TUNNEL_SERVER=wss://tunnels.agentics.dk:17443`
+> plus `.WithPublicUrlOverride(scheme: "https", port: 8443)` — keep the docs and
+> that wiring in sync.
+
 ## Env var reference
 
 | Variable             | Default          | Purpose                                                  |
