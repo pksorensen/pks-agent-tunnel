@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.4.0...agent-tunnel-v0.5.0) (2026-06-09)
+
+
+### Features
+
+* **tunnel:** expose per-slot resource so QR codes attach to the URL ([9e0a76d](https://github.com/pksorensen/pks-agent-tunnel/commit/9e0a76d9163fd16f13156e9f9b04e6051b9fda20))
+
 ## [0.4.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.3.2...agent-tunnel-v0.4.0) (2026-05-28)
 
 
