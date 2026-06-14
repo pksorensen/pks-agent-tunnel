@@ -64,13 +64,15 @@ func (h *httpFrontend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// the actual dial returns our yamux stream regardless of host.
 	target, _ := url.Parse("http://upstream.invalid")
 
-	// Original scheme as seen by the public client. The tunnel terminates
-	// TLS, so r.TLS != nil means the user came in over https; we forward to
-	// the upstream over plain http and rely on X-Forwarded-Proto for the
-	// upstream framework (Next.js, NextAuth, etc.) to know the real scheme
-	// when it builds absolute redirect URLs.
+	// Original scheme as seen by the public client. Prefer X-Forwarded-Proto
+	// from a trusted upstream TLS edge — prod tunnels.agentics.dk:8443 is
+	// fronted by an external proxy that terminates TLS and forwards plain
+	// HTTP here, so r.TLS is nil even though the user came in over https.
+	// Fall back to r.TLS for the direct-terminate case.
 	originalProto := "http"
-	if r.TLS != nil {
+	if xfp := r.Header.Get("X-Forwarded-Proto"); xfp != "" {
+		originalProto = xfp
+	} else if r.TLS != nil {
 		originalProto = "https"
 	}
 
