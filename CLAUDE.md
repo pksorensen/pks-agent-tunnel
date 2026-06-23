@@ -48,7 +48,13 @@ When in doubt, compare with `external/agentic-live-www/src/apps/apphost/AppHost.
 
 ## Releases
 
-`release-please` watches `main`. Conventional Commits in PR titles drive version bumps. On release, CI builds and pushes Docker images to `registry.kjeldager.io/agent-tunnel-server:<version>` and `:latest`. Aspire extension NuGet packaging is added at v0.4.
+`release-please` watches `main`. Conventional Commits in PR titles drive version bumps. On release, CI:
+
+- builds and pushes the **server** Docker image to `registry.kjeldager.io/agent-tunnel-server:<version>` and `:latest`;
+- cross-compiles the **`agent-tunnel` CLI** for all 6 platforms (`{linux,darwin,windows}_{amd64,arm64}`), attaches the binaries + `agent-tunnel_<version>_checksums.txt` to the GitHub release, and publishes them to the **agentics.dk release store** via GitHub OIDC (trusted publishing, no PAT) so `curl agentics.dk/install/agent-tunnel.sh | bash` serves them — component `agent-tunnel`, auto-registered on first publish under owner `pksorensen`;
+- publishes the `/tools/agent-tunnel` docs from `.agentics/tool/` to agentics.dk on the same cut (keep docs there in sync with the CLI; don't keep a static copy in agentic-live-www).
+
+The CLI version is stamped via `-ldflags "-X main.version=<semver>"`; `agent-tunnel version` prints it (`dev` for plain `go run`/`go build`). Aspire extension NuGet packaging is added at v0.4.
 
 ## ADRs
 

@@ -29,6 +29,42 @@ $USER_DATA_DIR/
 
 `tar czf` of the directory is a complete backup.
 
+## Install the CLI
+
+The `agent-tunnel` client ships as a prebuilt binary via the agentics.dk release
+store — no source checkout needed.
+
+**Linux / macOS**
+
+```bash
+curl -fsSL https://agentics.dk/install/agent-tunnel.sh | bash
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://agentics.dk/install/agent-tunnel.ps1 | iex
+```
+
+Pin a version or customize the install:
+
+```bash
+curl -fsSL https://agentics.dk/install/agent-tunnel.sh | VERSION=0.5.0 bash
+curl -fsSL https://agentics.dk/install/agent-tunnel.sh | INSTALL_DIR=~/bin NO_MODIFY_PATH=1 bash
+```
+
+The script detects your OS/architecture, verifies the sha256 checksum, installs
+`agent-tunnel` to `~/.local/bin` (or `%LOCALAPPDATA%\Agentics\bin` on Windows),
+and ensures it is on your `PATH`. Then expose a local port:
+
+```bash
+agent-tunnel host --server wss://tunnels.agentics.dk:17443 \
+  --owner agentics --name demo --http app=127.0.0.1:3000
+# → https://app--demo.tunnels.agentics.dk:8443
+```
+
+Full docs: <https://agentics.dk/tools/agent-tunnel>.
+
 ## Quick Start (local dev, no TLS)
 
 ```bash

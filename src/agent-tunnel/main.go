@@ -22,6 +22,10 @@ import (
 	"github.com/pksorensen/pks-agent-tunnel/src/agent-tunnel/internal/host"
 )
 
+// version is stamped at build time via -ldflags "-X main.version=<semver>".
+// Defaults to "dev" for local `go run`/`go build` without the flag.
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -35,8 +39,8 @@ func main() {
 			fmt.Fprintln(os.Stderr, "host:", err)
 			os.Exit(1)
 		}
-	case "version":
-		fmt.Println("agent-tunnel 0.0.1")
+	case "version", "--version", "-v":
+		fmt.Println("agent-tunnel", version)
 	case "help", "-h", "--help":
 		usage()
 	default:
