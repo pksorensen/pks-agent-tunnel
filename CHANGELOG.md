@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.5.0...agent-tunnel-v0.6.0) (2026-06-23)
+
+
+### Features
+
+* **cli:** distribute agent-tunnel CLI via agentics.dk install ([895d703](https://github.com/pksorensen/pks-agent-tunnel/commit/895d70393dc4147d4f23c19992466802636a4f3b))
+
+
+### Bug Fixes
+
+* **router:** trust X-Forwarded-Proto so https redirects survive TLS edge ([7ac93e5](https://github.com/pksorensen/pks-agent-tunnel/commit/7ac93e52c89cb5844d03825386a22476c7e663f6))
+
 ## [0.5.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.4.0...agent-tunnel-v0.5.0) (2026-06-09)
 
 
