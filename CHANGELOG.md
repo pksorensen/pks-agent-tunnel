@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.6.0...agent-tunnel-v0.7.0) (2026-07-18)
+
+
+### Features
+
+* **host:** self-heal control-session reconnect with capped backoff ([e6f9fc4](https://github.com/pksorensen/pks-agent-tunnel/commit/e6f9fc4b609d058d23c635fd2b2f87090c293cea))
+
 ## [0.6.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.5.0...agent-tunnel-v0.6.0) (2026-06-23)
 
 
