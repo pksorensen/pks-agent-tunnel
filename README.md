@@ -189,6 +189,83 @@ No database, no migrations — see [docs/storage.md](docs/storage.md) and [ADR 0
 
 See [docs/deployment.md](docs/deployment.md) for the full env-var matrix and the v0.2 TLS plan.
 
+## Serving on standard `:443` behind an existing reverse proxy (Traefik / Coolify)
+
+When the server terminates its own TLS (native ACME DNS-01: `ACME_DNS_PROVIDER`
++ `ACME_DNS_TOKEN`, `TLS_DOMAIN`, `LISTEN_HTTPS=:8443`), public URLs carry a port
+suffix like `:8443`. That's fine for `curl`, the Go CLI, browsers, and the Aspire
+integration — but **some hosted MCP clients only dial port 443**. In particular,
+claude.ai / Claude Desktop *custom connector* fetches run server-side from
+Anthropic's cloud, which **egresses only on `:443`** — a non-standard port gets a
+**silent TCP reset**, so the connector reports *"Couldn't reach …"* and nothing
+ever hits the tunnel. (Anthropic's connector backend also connects from
+`160.79.104.0/21` with a `Claude-User` / `python-httpx` user agent, and requires
+the full TLS chain served.)
+
+If `:443` on the box is already owned by another reverse proxy — e.g. **Coolify's
+Traefik** — front the tunnel with it using **TLS passthrough**: the proxy routes
+by SNI and forwards the still-encrypted bytes to the tunnel, which keeps
+terminating TLS with its own ACME cert. No cert duplication, no change to the
+tunnel binary, and direct `:8443` keeps working.
+
+### Traefik, via container labels (no proxy-config files)
+
+Traefik's docker provider must be enabled (`--providers.docker=true`). The tunnel
+container must (a) **share a Docker network with Traefik** and (b) carry the labels
+below. Docker labels are fixed at `create` time, so this is a one-time recreate
+(connected CLIs auto-reconnect within seconds):
+
+```bash
+docker rm -f agent-tunnel && docker run -d \
+  --name agent-tunnel \
+  --restart unless-stopped \
+  --network <traefik-network> \
+  -p 8443:8443 \
+  -p 17443:7443 \
+  -v agent-tunnel-data:/data \
+  --env-file /etc/agent-tunnel.env \
+  -l traefik.enable=true \
+  -l traefik.docker.network=<traefik-network> \
+  -l 'traefik.tcp.routers.agent-tunnel.entrypoints=https' \
+  -l 'traefik.tcp.routers.agent-tunnel.rule=HostSNIRegexp(`^.+\.<public-domain>$`)' \
+  -l 'traefik.tcp.routers.agent-tunnel.tls.passthrough=true' \
+  -l 'traefik.tcp.services.agent-tunnel.loadbalancer.server.port=8443' \
+  registry.kjeldager.io/agent-tunnel-server:latest
+```
+
+- `HostSNIRegexp` captures every tunnel subdomain (`*.<public-domain>`) and nothing
+  else, so a TCP passthrough router coexists with the proxy's HTTP routers on the
+  same `:443` entrypoint (they're matched by SNI).
+- `tls.passthrough=true` → Traefik never decrypts; the client still sees the
+  tunnel's own ACME cert. `loadbalancer.server.port=8443` is the tunnel's HTTPS
+  listener on the shared network.
+- Keep `-p 8443:8443` published — this only **adds** the port-less `:443` path;
+  existing `…:8443` clients are unaffected.
+- Requires `--providers.docker.exposedbydefault=false` + `traefik.enable=true`
+  (Coolify's default), and **no** `--providers.docker.constraints` that would
+  exclude a non-proxy-managed container.
+
+**Verify** from any external machine — the tunnel's cert must appear on `:443`
+(proving passthrough), not the proxy's default:
+
+```bash
+echo | openssl s_client -connect <public-domain>:443 \
+  -servername <slot>--<tunnel>.<public-domain> 2>/dev/null | openssl x509 -noout -subject
+# expect: subject=CN = *.<public-domain>   (NOT "TRAEFIK DEFAULT CERT")
+```
+
+**Redeploys:** the labels live on the container, so a bare `docker pull` + re-run
+drops them. Keep the labelled `docker run` above as your canonical deploy command
+(a small `deploy.sh`), not the un-labelled one.
+
+> Alternative: a Traefik **dynamic-config file** with the same TCP passthrough
+> router pointing at `host.docker.internal:8443` achieves the identical result
+> without touching the container, and survives container recreation — but lives in
+> the proxy's watched config dir (which Coolify may rewrite on proxy upgrades).
+>
+> HTTP/3 (QUIC on `443/udp`) isn't passthrough-routable; clients transparently
+> fall back to HTTP/2 over TCP.
+
 ## Aspire Drop-in
 
 ```diff

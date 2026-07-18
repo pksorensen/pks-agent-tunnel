@@ -62,7 +62,37 @@ func Run(ctx context.Context, args []string) error {
 		token:    *token,
 		slots:    slots,
 	}
-	return c.run(ctx)
+	return c.serve(ctx)
+}
+
+// serve runs the control connection and reconnects with capped backoff whenever
+// it drops. c.run returns when the control session ends — a server redeploy, a
+// network blip, the peer going away — and without this loop the process would
+// simply exit, leaving every slot dead (502 "no client connected") until
+// something restarts it. Retrying in-process makes a server restart self-heal.
+func (c *connector) serve(ctx context.Context) error {
+	const maxBackoff = 30 * time.Second
+	backoff := time.Second
+	for {
+		start := time.Now()
+		err := c.run(ctx)
+		if ctx.Err() != nil {
+			return nil // clean shutdown (context cancelled)
+		}
+		if time.Since(start) > maxBackoff {
+			backoff = time.Second // stayed up a while → fresh drop, reset backoff
+		}
+		c.log.Warn("tunnel control session ended; reconnecting", "err", err, "retry_in", backoff)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
 }
 
 type slotConfig struct {
