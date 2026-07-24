@@ -4,17 +4,48 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PackageId>Aspire.Hosting.AgentTunnel</PackageId>
-    <Version>0.0.1</Version>
+
+    <!-- `Aspire.*` is a reserved ID prefix owned by Microsoft on nuget.org, so the
+         PackageId is Agentics.Extensions.Aspire.* while the C# namespace stays
+         `Aspire.Hosting` (drop-in for Aspire.Hosting.DevTunnels). -->
+    <PackageId>Agentics.Extensions.Aspire.AgentTunnel</PackageId>
     <Description>
       Aspire hosting integration that exposes local Aspire resources through pks-agent-tunnel.
       Drop-in replacement for Aspire.Hosting.DevTunnels — same AddDevTunnel / WithReference /
       WithAnonymousAccess / GetEndpoint surface, no Azure dependency.
     </Description>
+
+    <!-- Version is driven by CI (-p:PackageVersion from the release-please tag);
+         this is only the local-build fallback. -->
+    <Version>0.6.0</Version>
+
+    <!-- Pack / distribution metadata -->
+    <Authors>Poul Kjeldager Sørensen</Authors>
+    <Company>Agentics</Company>
+    <PackageProjectUrl>https://github.com/pksorensen/pks-agent-tunnel</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/pksorensen/pks-agent-tunnel</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>aspire;hosting;extension;tunnel;devtunnel;agentics</PackageTags>
+
+    <!-- SourceLink + deterministic build (SDK-integrated on net8+, no extra package) -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting" Version="13.4.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

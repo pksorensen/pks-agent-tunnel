@@ -54,7 +54,9 @@ When in doubt, compare with `external/agentic-live-www/src/apps/apphost/AppHost.
 - cross-compiles the **`agent-tunnel` CLI** for all 6 platforms (`{linux,darwin,windows}_{amd64,arm64}`), attaches the binaries + `agent-tunnel_<version>_checksums.txt` to the GitHub release, and publishes them to the **agentics.dk release store** via GitHub OIDC (trusted publishing, no PAT) so `curl agentics.dk/install/agent-tunnel.sh | bash` serves them — component `agent-tunnel`, auto-registered on first publish under owner `pksorensen`;
 - publishes the `/tools/agent-tunnel` docs from `.agentics/tool/` to agentics.dk on the same cut (keep docs there in sync with the CLI; don't keep a static copy in agentic-live-www).
 
-The CLI version is stamped via `-ldflags "-X main.version=<semver>"`; `agent-tunnel version` prints it (`dev` for plain `go run`/`go build`). Aspire extension NuGet packaging is added at v0.4.
+The CLI version is stamped via `-ldflags "-X main.version=<semver>"`; `agent-tunnel version` prints it (`dev` for plain `go run`/`go build`).
+
+The **Aspire extension** is also packed + pushed to nuget.org on every release cut (the `publish-nuget` job) as `Agentics.Extensions.Aspire.AgentTunnel` — token-less via NuGet.org Trusted Publishing (OIDC), no `NUGET_API_KEY`. It tracks the repo version. One-time nuget.org setup: a Trusted Publisher policy for that package ID bound to `pksorensen/pks-agent-tunnel` + `release.yml`, plus a `NUGET_USER` repo secret (nuget.org profile name).
 
 ## ADRs
 

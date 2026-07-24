@@ -4,9 +4,13 @@ Aspire hosting integration for [pks-agent-tunnel](https://github.com/pksorensen/
 
 ## Install
 
-```xml
-<PackageReference Include="Aspire.Hosting.AgentTunnel" Version="0.0.*" />
+```bash
+dotnet add package Agentics.Extensions.Aspire.AgentTunnel
 ```
+
+> Published as `Agentics.Extensions.Aspire.AgentTunnel` (the `Aspire.*` ID prefix is
+> Microsoft-reserved); the API lives in the `Aspire.Hosting` namespace, so a drop-in
+> `using Aspire.Hosting;` keeps working unchanged.
 
 ## Drop-in
 

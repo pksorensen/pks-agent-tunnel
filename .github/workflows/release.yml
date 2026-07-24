@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Publish the Aspire extension for a specific version now (skips release-please; use to backfill a release cut before publish-nuget existed). e.g. 0.7.0'
+        required: false
 
 permissions:
   contents: write
@@ -180,3 +184,62 @@ jobs:
           curl -fsS -X POST -H "Authorization: Bearer ${OIDC}" -H "Content-Type: application/json" \
             -d "$PAYLOAD" https://agentics.dk/api/tools/docs
           echo "published agent-tunnel docs v${VERSION} (${COUNT} files)"
+
+  # Pack + publish the Aspire hosting extension to nuget.org on the same release
+  # cut. PackageId is Agentics.Extensions.Aspire.AgentTunnel (the `Aspire.*` prefix
+  # is Microsoft-reserved). Token-less via NuGet.org Trusted Publishing (OIDC) —
+  # no NUGET_API_KEY secret. Independent of build-push (only needs release-please),
+  # so it publishes on GitHub-hosted runners even if the self-hosted CLI build queues.
+  #
+  # One-time setup on nuget.org (Account → Trusted Publishing) for
+  # Agentics.Extensions.Aspire.AgentTunnel:
+  #   Repository Owner: pksorensen
+  #   Repository:       pks-agent-tunnel
+  #   Workflow File:    release.yml
+  publish-nuget:
+    needs: release-please
+    # Publish when release-please cuts a release, or on a manual dispatch with a version
+    # (backfills a release cut from before this job existed — e.g. 0.7.0).
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event.inputs.version != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # enable GitHub OIDC token issuance for Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Pack
+        env:
+          RP_VERSION: ${{ needs.release-please.outputs.version }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${INPUT_VERSION:-$RP_VERSION}"
+          [ -n "$VERSION" ] || { echo "::error::no version to publish"; exit 1; }
+          echo "Publishing Aspire extension version: $VERSION"
+          dotnet pack src/aspire/Aspire.Hosting.AgentTunnel/Aspire.Hosting.AgentTunnel.csproj \
+            --configuration Release \
+            --output ./packages \
+            -p:PackageVersion="${VERSION}"
+          ls -la packages
+
+      - name: NuGet login (OIDC → short-lived API key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          # nuget.org profile name — a public identifier, not a credential.
+          user: pksorensen
+
+      - name: Push to NuGet.org
+        run: |
+          set -euo pipefail
+          for package in packages/*.nupkg; do
+            echo "Pushing $(basename "$package")..."
+            dotnet nuget push "$package" \
+              --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
