@@ -31,6 +31,8 @@ public class AgentTunnelResource : Resource
     /// </summary>
     internal (string? Scheme, int? Port) PublicUrlOverride { get; set; }
 
+    internal string? CliBinaryPath { get; set; }
+
     /// <summary>
     /// Slot registrations, keyed by the underlying resource. Populated by
     /// <see cref="AgentTunnelExtensions.WithReference"/> at construction time.
@@ -57,7 +59,7 @@ public class AgentTunnelResource : Resource
 
     /// <summary>
     /// TaskCompletionSource that completes when the CLI prints its first
-    /// <c>TUNNEL_READY</c> line. <see cref="GetEndpoint"/> awaits on this.
+    /// <c>TUNNEL_READY</c> line. <c>GetEndpoint</c> awaits on this.
     /// </summary>
     internal TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 

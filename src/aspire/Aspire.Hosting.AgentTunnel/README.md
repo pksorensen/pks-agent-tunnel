@@ -45,6 +45,16 @@ var tunnel = builder.AddAgentTunnel("agentic-tunnel");
 tunnel.Resource.ServerUrl = "wss://tunnels.agentics.dk:7443";
 ```
 
+The package also reads standard AppHost configuration:
+
+- `AGENT_TUNNEL_SERVER` selects the control server.
+- `AGENT_TUNNEL_BIN` selects a prebuilt CLI binary.
+- `AGENT_TUNNEL_SOURCE` builds the CLI from a local pks-agent-tunnel checkout and reuses
+  `bin/agent-tunnel` when Go is unavailable.
+
+The equivalent explicit source API is
+`builder.AddAgentTunnel("agentic-tunnel").WithLocalSource("../pks-agent-tunnel")`.
+
 ## Server
 
 Run the [pks-agent-tunnel-server](../../agent-tunnel-server/) — locally or as a Docker image at `registry.kjeldager.io/agent-tunnel-server:latest`.

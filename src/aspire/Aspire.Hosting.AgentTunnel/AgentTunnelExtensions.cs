@@ -37,6 +37,10 @@ public static class AgentTunnelExtensions
         _ = existingId; // accepted for API compat; see XML doc above.
 
         var resource = new DevTunnelResource(name);
+        resource.ServerUrl = builder.Configuration["AGENT_TUNNEL_SERVER"]
+            ?? resource.ServerUrl;
+        resource.CliBinaryPath = builder.Configuration["AGENT_TUNNEL_BIN"]
+            ?? builder.Configuration["PKS_AGENT_TUNNEL_BIN"];
         var rb = builder.AddResource(resource);
 
         // The CLI is a *transport*, not an app resource — we spawn it outside the
@@ -47,6 +51,10 @@ public static class AgentTunnelExtensions
         // has had its endpoint port allocated. AfterEndpointsAllocatedEvent is
         // deprecated in 13.x and doesn't fire reliably anymore.
         builder.Services.AddSingleton(new AgentTunnelHooks()); // disposed by DI on shutdown
+
+        var localSource = builder.Configuration["AGENT_TUNNEL_SOURCE"];
+        if (!string.IsNullOrWhiteSpace(localSource))
+            rb.WithLocalSource(localSource);
 
         return rb;
     }
@@ -156,6 +164,56 @@ public static class AgentTunnelExtensions
     }
 
     /// <summary>
+    /// Builds the agent-tunnel CLI from a local pks-agent-tunnel checkout and uses that binary.
+    /// If Go is unavailable, an existing binary in the checkout's <c>bin/</c> directory is reused.
+    /// </summary>
+    public static IResourceBuilder<DevTunnelResource> WithLocalSource(
+        this IResourceBuilder<DevTunnelResource> builder,
+        string sourceDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceDirectory);
+
+        var sourcePath = Path.GetFullPath(sourceDirectory);
+        if (!Directory.Exists(sourcePath))
+            throw new DirectoryNotFoundException(
+                $"pks-agent-tunnel source directory was not found: {sourcePath}");
+
+        var binaryPath = Path.Combine(
+            sourcePath,
+            "bin",
+            OperatingSystem.IsWindows() ? "agent-tunnel.exe" : "agent-tunnel");
+        var go = FindGoExecutable();
+
+        if (go is null)
+        {
+            if (!File.Exists(binaryPath))
+                throw new InvalidOperationException(
+                    $"Go was not found and no existing agent-tunnel binary exists at '{binaryPath}'.");
+
+            builder.Resource.CliBinaryPath = binaryPath;
+            return builder;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(binaryPath)!);
+        using var build = Process.Start(new ProcessStartInfo(go)
+        {
+            WorkingDirectory = sourcePath,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            ArgumentList = { "build", "-o", binaryPath, "./src/agent-tunnel" },
+        }) ?? throw new InvalidOperationException("Failed to start Go for agent-tunnel build.");
+
+        build.WaitForExit();
+        if (build.ExitCode != 0)
+            throw new InvalidOperationException(
+                $"Building agent-tunnel failed:{Environment.NewLine}{build.StandardError.ReadToEnd()}");
+
+        builder.Resource.CliBinaryPath = binaryPath;
+        return builder;
+    }
+
+    /// <summary>
     /// Returns a <see cref="ReferenceExpression"/> for the public URL of <paramref name="resource"/>
     /// through this tunnel. Resolution awaits the CLI's first <c>TUNNEL_READY</c>
     /// emission, so the value is only materialised when an app actually needs it
@@ -192,6 +250,32 @@ public static class AgentTunnelExtensions
             throw new InvalidOperationException(
                 $"No tunnel slot registered for '{slotName}'. Call WithReference({slotName}) before GetSlot.");
         return tunnel.ApplicationBuilder.CreateResourceBuilder(slot);
+    }
+
+    private static string? FindGoExecutable()
+    {
+        var executable = OperatingSystem.IsWindows() ? "go.exe" : "go";
+        var path = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (var directory in path.Split(Path.PathSeparator))
+        {
+            if (string.IsNullOrWhiteSpace(directory)) continue;
+            var candidate = Path.Combine(directory, executable);
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        foreach (var candidate in new[]
+        {
+            Path.Combine(userProfile, "go", "bin", executable),
+            "/usr/local/go/bin/go",
+            "/usr/lib/go/bin/go",
+            "/snap/bin/go",
+        })
+        {
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        return null;
     }
 
     private sealed class TunnelUrlValueProvider : IValueProvider, IManifestExpressionProvider
@@ -263,7 +347,7 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
 
     private Task StartCliInternalAsync(AgentTunnelResource tunnel, ILogger logger, ResourceNotificationService notifier, CancellationToken ct)
     {
-        var binary = ResolveCliBinary()
+        var binary = ResolveCliBinary(tunnel)
             ?? throw new InvalidOperationException(
                 "agent-tunnel CLI not found. Set PKS_AGENT_TUNNEL_BIN, place a binary next to the package, or install the CLI on PATH.");
 
@@ -382,13 +466,20 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
         }
     }
 
-    private static string? ResolveCliBinary()
+    private static string? ResolveCliBinary(AgentTunnelResource tunnel)
     {
-        // 1) Explicit env var.
+        // 1) Resource-specific configuration (including WithLocalSource).
+        if (!string.IsNullOrWhiteSpace(tunnel.CliBinaryPath)
+            && File.Exists(tunnel.CliBinaryPath))
+        {
+            return tunnel.CliBinaryPath;
+        }
+
+        // 2) Backwards-compatible explicit env var.
         var fromEnv = Environment.GetEnvironmentVariable("PKS_AGENT_TUNNEL_BIN");
         if (!string.IsNullOrEmpty(fromEnv) && File.Exists(fromEnv)) return fromEnv;
 
-        // 2) `tools/` co-located with the assembly (NuGet pack ships the binary).
+        // 3) `tools/` co-located with the assembly.
         var asmDir = Path.GetDirectoryName(typeof(AgentTunnelExtensions).Assembly.Location);
         if (asmDir is not null)
         {
@@ -397,7 +488,7 @@ internal sealed class AgentTunnelHooks : IAsyncDisposable
             if (File.Exists(candidate)) return candidate;
         }
 
-        // 3) PATH lookup.
+        // 4) PATH lookup.
         return WhichOnPath(OperatingSystem.IsWindows() ? "agent-tunnel.exe" : "agent-tunnel");
     }
 
