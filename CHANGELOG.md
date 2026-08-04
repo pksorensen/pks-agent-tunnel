@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.7.0...agent-tunnel-v0.8.0) (2026-08-04)
+
+
+### Features
+
+* add configurable Aspire tunnel defaults ([7255aa6](https://github.com/pksorensen/pks-agent-tunnel/commit/7255aa60fb5cfb0a2b08d7d26f1ab6d348f373ba))
+* add configurable Aspire tunnel defaults ([40b43b3](https://github.com/pksorensen/pks-agent-tunnel/commit/40b43b3083bb217cf971702468958c0c4ca915e1))
+
 ## [0.7.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.6.0...agent-tunnel-v0.7.0) (2026-07-18)
 
 
