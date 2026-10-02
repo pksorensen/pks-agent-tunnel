@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.8.0...agent-tunnel-v0.9.0) (2026-10-02)
+
+
+### Features
+
+* **server:** see the real client behind an L4 proxy (PROXY protocol) ([48d4835](https://github.com/pksorensen/pks-agent-tunnel/commit/48d4835b6cdbaae9e9e5cbecdee79b2316438a94))
+
 ## [0.8.0](https://github.com/pksorensen/pks-agent-tunnel/compare/agent-tunnel-v0.7.0...agent-tunnel-v0.8.0) (2026-08-04)
 
 
