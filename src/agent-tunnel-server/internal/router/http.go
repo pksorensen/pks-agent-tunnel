@@ -70,10 +70,10 @@ func (h *httpFrontend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// HTTP here, so r.TLS is nil even though the user came in over https.
 	// Fall back to r.TLS for the direct-terminate case.
 	originalProto := "http"
-	if xfp := r.Header.Get("X-Forwarded-Proto"); xfp != "" {
-		originalProto = xfp
-	} else if r.TLS != nil {
+	if r.TLS != nil {
 		originalProto = "https"
+	} else if xfp := r.Header.Get("X-Forwarded-Proto"); xfp != "" {
+		originalProto = xfp
 	}
 
 	proxy := &httputil.ReverseProxy{
@@ -83,7 +83,11 @@ func (h *httpFrontend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			req.Host = r.Host
 			req.Header.Set("X-Forwarded-Proto", originalProto)
 			req.Header.Set("X-Forwarded-Host", r.Host)
-			// X-Forwarded-For is set automatically by httputil.ReverseProxy.
+			// This server is the HTTP edge: whatever X-Forwarded-For the
+			// client sent is its own claim, so drop it. ReverseProxy then
+			// sets it to RemoteAddr alone — the real client, also behind an
+			// L4 proxy speaking PROXY protocol (internal/proxyproto).
+			req.Header.Del("X-Forwarded-For")
 		},
 		Transport: &http.Transport{
 			DialContext:           dial,

@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/pksorensen/pks-agent-tunnel/src/agent-tunnel-server/internal/config"
 	"github.com/pksorensen/pks-agent-tunnel/src/agent-tunnel-server/internal/control"
+	"github.com/pksorensen/pks-agent-tunnel/src/agent-tunnel-server/internal/proxyproto"
 	"github.com/pksorensen/pks-agent-tunnel/src/agent-tunnel-server/internal/router"
 	"github.com/pksorensen/pks-agent-tunnel/src/agent-tunnel-server/internal/sessions"
 	"github.com/pksorensen/pks-agent-tunnel/src/agent-tunnel-server/internal/store"
@@ -44,6 +46,14 @@ func main() {
 
 	servers := make([]*http.Server, 0, 3)
 
+	// Only the public frontend can sit behind an L4 proxy; the control plane
+	// is reached directly.
+	trusted, err := proxyproto.ParseTrusted(cfg.ProxyProtocolTrusted)
+	if err != nil {
+		log.Error("config", "err", err)
+		os.Exit(1)
+	}
+
 	if cfg.ACME.Enabled() {
 		tlsCfg, challengeHandler, err := tlssetup.Setup(ctx, cfg, log)
 		if err != nil {
@@ -56,7 +66,7 @@ func main() {
 		ctrlSrv := &http.Server{Addr: cfg.ListenControl, Handler: ctrlHandler, TLSConfig: tlsCfg}
 
 		go runServer(log, "http-challenge", challengeSrv)
-		go runServerTLS(log, "https", httpsSrv)
+		go runServerTLSBehind(log, "https", httpsSrv, trusted)
 		go runServerTLS(log, "control-tls", ctrlSrv)
 
 		servers = append(servers, challengeSrv, httpsSrv, ctrlSrv)
@@ -65,7 +75,7 @@ func main() {
 		httpSrv := &http.Server{Addr: cfg.ListenHTTP, Handler: httpHandler}
 
 		go runServer(log, "control", ctrlSrv)
-		go runServer(log, "http", httpSrv)
+		go runServerBehind(log, "http", httpSrv, trusted)
 
 		servers = append(servers, ctrlSrv, httpSrv)
 	}
@@ -78,6 +88,7 @@ func main() {
 		"public_domain", cfg.PublicDomain,
 		"public_scheme", cfg.PublicScheme(),
 		"acme", cfg.ACME.Enabled(),
+		"proxy_protocol_trusted", cfg.ProxyProtocolTrusted,
 	)
 
 	<-ctx.Done()
@@ -101,6 +112,34 @@ func runServerTLS(log *slog.Logger, name string, s *http.Server) {
 		s.TLSConfig = &tls.Config{}
 	}
 	if err := s.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Error("tls listener failed", "name", name, "addr", s.Addr, "err", err)
+		os.Exit(1)
+	}
+}
+
+// listenBehind opens the frontend listener, reading PROXY protocol headers
+// from the trusted proxies when there are any.
+func listenBehind(log *slog.Logger, name string, s *http.Server, trusted []*net.IPNet) net.Listener {
+	ln, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		log.Error("listener failed", "name", name, "addr", s.Addr, "err", err)
+		os.Exit(1)
+	}
+	return proxyproto.Wrap(ln, trusted)
+}
+
+func runServerBehind(log *slog.Logger, name string, s *http.Server, trusted []*net.IPNet) {
+	if err := s.Serve(listenBehind(log, name, s, trusted)); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Error("listener failed", "name", name, "addr", s.Addr, "err", err)
+		os.Exit(1)
+	}
+}
+
+func runServerTLSBehind(log *slog.Logger, name string, s *http.Server, trusted []*net.IPNet) {
+	if s.TLSConfig == nil {
+		s.TLSConfig = &tls.Config{}
+	}
+	if err := s.ServeTLS(listenBehind(log, name, s, trusted), "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error("tls listener failed", "name", name, "addr", s.Addr, "err", err)
 		os.Exit(1)
 	}

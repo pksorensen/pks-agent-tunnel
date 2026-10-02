@@ -20,7 +20,12 @@ type Config struct {
 	// so the URLs the CLI emits actually resolve.
 	PublicHTTPPort string
 	AuthMode       string // "anonymous" or "token"
-	ACME           ACMEConfig
+	// ProxyProtocolTrusted lists the proxies (IPs or CIDRs, comma-separated)
+	// allowed to prefix public-frontend connections with a PROXY protocol
+	// header — an L4 proxy in front, such as Traefik with TLS passthrough.
+	// Empty = off. See docs/deployment.md.
+	ProxyProtocolTrusted string
+	ACME                 ACMEConfig
 }
 
 // ACMEConfig holds ACME / Let's Encrypt settings. Empty Email = ACME off
@@ -60,14 +65,15 @@ func Load() Config {
 	}
 
 	c := Config{
-		UserDataDir:    envOr("USER_DATA_DIR", "./app/user-data"),
-		ListenHTTP:     envOr("LISTEN_HTTP", defaultHTTP),
-		ListenHTTPS:    envOr("LISTEN_HTTPS", ":443"),
-		ListenControl:  envOr("LISTEN_CONTROL", defaultControl),
-		PublicDomain:   envOr("TLS_DOMAIN", "localtest.me"),
-		PublicHTTPPort: os.Getenv("PUBLIC_HTTP_PORT"),
-		AuthMode:       envOr("AUTH_MODE", "anonymous"),
-		ACME:           acme,
+		UserDataDir:          envOr("USER_DATA_DIR", "./app/user-data"),
+		ListenHTTP:           envOr("LISTEN_HTTP", defaultHTTP),
+		ListenHTTPS:          envOr("LISTEN_HTTPS", ":443"),
+		ListenControl:        envOr("LISTEN_CONTROL", defaultControl),
+		PublicDomain:         envOr("TLS_DOMAIN", "localtest.me"),
+		PublicHTTPPort:       os.Getenv("PUBLIC_HTTP_PORT"),
+		AuthMode:             envOr("AUTH_MODE", "anonymous"),
+		ProxyProtocolTrusted: os.Getenv("PROXY_PROTOCOL_TRUSTED"),
+		ACME:                 acme,
 	}
 
 	flag.StringVar(&c.UserDataDir, "user-data-dir", c.UserDataDir, "Root for persisted state ($USER_DATA_DIR)")
@@ -77,6 +83,7 @@ func Load() Config {
 	flag.StringVar(&c.PublicDomain, "public-domain", c.PublicDomain, "Wildcard parent domain (e.g. tunnels.example.com)")
 	flag.StringVar(&c.PublicHTTPPort, "public-http-port", c.PublicHTTPPort, "Port number shown in public URLs (overrides listener port — set when host port differs from container port)")
 	flag.StringVar(&c.AuthMode, "auth-mode", c.AuthMode, "anonymous | token")
+	flag.StringVar(&c.ProxyProtocolTrusted, "proxy-protocol-trusted", c.ProxyProtocolTrusted, "IPs/CIDRs allowed to send a PROXY protocol header to the public frontend ($PROXY_PROTOCOL_TRUSTED)")
 	flag.StringVar(&c.ACME.Email, "acme-email", c.ACME.Email, "Email for ACME account; empty disables ACME")
 	flag.StringVar(&c.ACME.DNSProvider, "acme-dns-provider", c.ACME.DNSProvider, "libdns provider name (only 'cloudflare' supported)")
 	flag.StringVar(&c.ACME.DNSToken, "acme-dns-token", c.ACME.DNSToken, "DNS provider API token")
